@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gamified Task Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen pb-12 font-sans" x-data="trackerApp()">
+
+  <!-- Top Dashboard Header -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-10 shadow-lg">
+    <div class="max-w-4xl mx-auto p-4 space-y-4">
+      
+      <!-- Stats & Badges -->
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <span class="text-2xl font-black text-amber-400" x-text="totalXp + ' XP Earned'"></span>
+          <p class="text-xs text-slate-400 mt-0.5">Keep track of work tasks and energy restoration</p>
+        </div>
+
+        <!-- Timeframe XP Summary Badges -->
+        <div class="flex gap-2">
+          <div class="bg-slate-900/60 border border-slate-700 px-3 py-1.5 rounded-lg text-center">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold">Today</div>
+            <div class="text-sm font-bold text-emerald-400" x-text="'+' + timeframeXp.today + ' XP'"></div>
+          </div>
+          <div class="bg-slate-900/60 border border-slate-700 px-3 py-1.5 rounded-lg text-center">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold">Week</div>
+            <div class="text-sm font-bold text-cyan-400" x-text="'+' + timeframeXp.week + ' XP'"></div>
+          </div>
+          <div class="bg-slate-900/60 border border-slate-700 px-3 py-1.5 rounded-lg text-center">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold">Month</div>
+            <div class="text-sm font-bold text-purple-400" x-text="'+' + timeframeXp.month + ' XP'"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rest Bar Section -->
+      <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-700 space-y-1.5">
+        <div class="flex justify-between items-center text-xs">
+          <span class="font-bold flex items-center gap-1.5" :class="restEnergy < 25 ? 'text-rose-400' : 'text-sky-400'">
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            Current Rest Energy Bar
+          </span>
+          <span class="font-mono font-bold" x-text="Math.round(restEnergy) + '%'"></span>
+        </div>
+        <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700">
+          <div class="h-3 transition-all duration-300" :class="restEnergy < 25 ? 'bg-rose-500 animate-pulse' : 'bg-sky-400'" :style="`width: ${restEnergy}%`"></div>
+        </div>
+        <template x-if="restEnergy < 25">
+          <p class="text-[11px] text-rose-300 font-medium">⚠️ Energy running low! Perform a Restful task to recharge your bar.</p>
+        </template>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="max-w-4xl mx-auto p-4 space-y-6 mt-2">
+
+    <!-- Add Task Card -->
+    <section class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-md space-y-4">
+      <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Add New Task</h2>
+      <form @submit.prevent="addTask" class="space-y-4">
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input type="text" x-model="newTask.title" placeholder="Task description..." required class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          
+          <div class="flex gap-2">
+            <select x-model="newTask.category" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1">
+              <template x-for="cat in categories" :key="cat.name">
+                <option :value="cat.name" x-text="cat.name"></option>
+              </template>
+            </select>
+            <button type="button" @click="showCategoryModal = true" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-xs font-semibold">Edit Categories</button>
+          </div>
+        </div>
+
+        <!-- Custom Energy Impact & Task Type Selection -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-900/60 p-3 rounded-lg border border-slate-700/60">
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-300">Task Type:</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" 
+                      @click="newTask.isRest = false" 
+                      :class="!newTask.isRest ? 'bg-rose-600 border-rose-400 text-white font-bold ring-2 ring-rose-500/50' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'" 
+                      class="p-2 rounded-lg border text-xs text-center transition-all">
+                💼 Work (Drains)
+              </button>
+
+              <button type="button" 
+                      @click="newTask.isRest = true" 
+                      :class="newTask.isRest ? 'bg-sky-600 border-sky-400 text-white font-bold ring-2 ring-sky-500/50' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'" 
+                      class="p-2 rounded-lg border text-xs text-center transition-all">
+                🎮 Rest (Recharges)
+              </button>
+            </div>
+          </div>
+
+          <!-- Custom Energy Amount Slider/Input -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center text-xs">
+              <label class="font-semibold text-slate-300" x-text="newTask.isRest ? 'Energy Restored:' : 'Energy Drained:'"></label>
+              <span class="font-mono font-bold" :class="newTask.isRest ? 'text-sky-400' : 'text-rose-400'" x-text="(newTask.isRest ? '+' : '-') + newTask.energyImpact + '%'"></span>
+            </div>
+            <div class="flex items-center gap-3">
+              <input type="range" x-model.number="newTask.energyImpact" min="5" max="100" step="5" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+              <input type="number" x-model.number="newTask.energyImpact" min="1" max="100" class="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-center font-bold text-slate-100">
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtasks Creation Section -->
+        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-700/60 space-y-2">
+          <div class="flex justify-between items-center">
+            <label class="text-xs font-semibold text-slate-300">Subtasks (Optional - Points split proportionally):</label>
+            <span class="text-[11px] text-indigo-400 font-mono" x-text="newTask.subtasks.length + ' subtasks added'"></span>
+          </div>
+
+          <div class="flex gap-2">
+            <input type="text" x-model="newSubtaskInput" placeholder="Add a subtask step..." @keydown.enter.prevent="addSubtaskToNewTask" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 flex-1 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <button type="button" @click="addSubtaskToNewTask" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold">+ Subtask</button>
+          </div>
+
+          <template x-if="newTask.subtasks.length > 0">
+            <div class="space-y-1.5 pt-1">
+              <template x-for="(sub, idx) in newTask.subtasks" :key="idx">
+                <div class="flex items-center justify-between bg-slate-800/80 px-2.5 py-1 rounded text-xs">
+                  <span class="text-slate-300" x-text="(idx + 1) + '. ' + sub.title"></span>
+                  <button type="button" @click="newTask.subtasks.splice(idx, 1)" class="text-rose-400 hover:text-rose-300 font-bold text-xs">✕</button>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 pt-1">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400 font-semibold">Total XP Value:</span>
+            <input type="number" x-model.number="newTask.xp" min="5" max="500" step="5" class="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-400 font-bold focus:outline-none focus:ring-1 focus:ring-amber-500">
+          </div>
+
+          <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-lg font-bold text-sm transition-colors">
+            + Add Task
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Task List Section -->
+    <section class="space-y-3">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Active Tasks</h2>
+        <span class="text-xs text-slate-400" x-text="tasks.filter(t => !t.completed).length + ' pending'"></span>
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="task in tasks.filter(t => !t.completed)" :key="task.id">
+          <div class="bg-slate-800 border border-slate-700 hover:border-slate-600 p-3.5 rounded-xl space-y-3 transition-all">
+            
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3 flex-1 min-w-0">
+                <button @click="completeTask(task)" title="Complete entire task" class="mt-0.5 w-6 h-6 rounded-lg border border-slate-600 hover:border-emerald-500 hover:bg-emerald-500/20 flex items-center justify-center transition-colors flex-shrink-0">
+                  <svg class="w-4 h-4 text-emerald-400 opacity-0 hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                </button>
+
+                <div class="min-w-0 flex-1 space-y-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-sm text-slate-100" x-text="task.title"></span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-700 text-slate-300" x-text="task.category"></span>
+                  </div>
+
+                  <template x-if="task.subtasks && task.subtasks.length > 0">
+                    <div class="space-y-1 pt-1">
+                      <div class="flex justify-between items-center text-[11px] text-slate-400">
+                        <span x-text="getCompletedSubtaskCount(task) + ' of ' + task.subtasks.length + ' subtasks done'"></span>
+                        <span class="font-mono" x-text="getSubtaskProgressPercentage(task) + '%'"></span>
+                      </div>
+                      <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                        <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-300" :style="`width: ${getSubtaskProgressPercentage(task)}%`"></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="text-right">
+                  <div class="text-xs font-bold text-amber-400" x-text="'+' + task.xp + ' XP Total'"></div>
+                  <div class="text-[10px] font-bold" :class="task.isRest ? 'text-sky-400' : 'text-rose-400'" x-text="(task.isRest ? '+' : '-') + task.energyImpact + '% Rest'"></div>
+                </div>
+
+                <button @click="deleteTask(task.id)" class="text-slate-500 hover:text-rose-400 p-1">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <template x-if="task.subtasks && task.subtasks.length > 0">
+              <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/60 space-y-1.5 ml-9">
+                <template x-for="(sub, idx) in task.subtasks" :key="sub.id">
+                  <div class="flex items-center justify-between gap-2 p-1 rounded hover:bg-slate-800/50">
+                    <label class="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                      <input type="checkbox" :checked="sub.completed" @change="toggleSubtask(task, sub)" class="w-3.5 h-3.5 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-800 cursor-pointer">
+                      <span class="text-xs" :class="sub.completed ? 'line-through text-slate-500' : 'text-slate-200'" x-text="sub.title"></span>
+                    </label>
+                    
+                    <span class="text-[10px] font-mono text-amber-400/80 font-semibold" x-text="'+' + Math.round(task.xp / task.subtasks.length) + ' XP'"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+          </div>
+        </template>
+
+        <template x-if="tasks.filter(t => !t.completed).length === 0">
+          <div class="text-center py-8 bg-slate-800/40 rounded-xl border border-dashed border-slate-700 text-slate-500 text-sm">
+            All tasks completed! Add a new task above or take a rest.
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- Energy & Rest Analytics Card -->
+    <section class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
+      <div class="flex flex-wrap justify-between items-center gap-2">
+        <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Energy & Rest Statistics</h2>
+        <div class="flex bg-slate-900 p-1 rounded-lg border border-slate-700 gap-1">
+          <button @click="energyTimeframe = 'day'" :class="energyTimeframe === 'day' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">Day</button>
+          <button @click="energyTimeframe = 'month'" :class="energyTimeframe === 'month' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">Month</button>
+          <button @click="energyTimeframe = 'year'" :class="energyTimeframe === 'year' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">Year</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-700/60 flex justify-between items-center">
+          <div>
+            <div class="text-xs text-slate-400">Restful Activities Completed</div>
+            <div class="text-lg font-bold text-sky-400" x-text="getEnergyStats(energyTimeframe).restCount + ' activities'"></div>
+          </div>
+          <div class="text-right">
+            <div class="text-xs text-slate-400">Total Energy Restored</div>
+            <div class="text-lg font-bold text-emerald-400" x-text="'+' + getEnergyStats(energyTimeframe).restEnergy + '%'"></div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-700/60 flex justify-between items-center">
+          <div>
+            <div class="text-xs text-slate-400">Work Tasks Completed</div>
+            <div class="text-lg font-bold text-rose-400" x-text="getEnergyStats(energyTimeframe).workCount + ' tasks'"></div>
+          </div>
+          <div class="text-right">
+            <div class="text-xs text-slate-400">Total Energy Drained</div>
+            <div class="text-lg font-bold text-rose-400" x-text="'-' + getEnergyStats(energyTimeframe).drainedEnergy + '%'"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <h3 class="text-xs font-semibold text-slate-400">Energy Drain Spent by Category (<span x-text="energyTimeframe"></span>)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <template x-for="cat in categories" :key="cat.name">
+            <div class="bg-slate-900/40 p-2.5 rounded-lg border border-slate-700/40 space-y-1">
+              <div class="flex justify-between items-center text-xs">
+                <span class="font-bold text-slate-200" x-text="cat.name"></span>
+                <span class="font-mono text-rose-400 font-bold" x-text="getCategoryEnergyDrain(cat.name, energyTimeframe) + '% drained'"></span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                <div class="bg-rose-500 h-1.5 rounded-full transition-all duration-300" 
+                     :style="`width: ${Math.min(100, getCategoryEnergyDrain(cat.name, energyTimeframe))}%`"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analytics & Activity Graphs Section -->
+    <section class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
+      <div class="flex flex-wrap justify-between items-center gap-2">
+        <div>
+          <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Activity Graphs</h2>
+          <p class="text-[11px] text-slate-400">Bars = Category XP Breakdown | Line = Rest Energy Restored (%)</p>
+        </div>
+        
+        <!-- Graph Filter Toggle -->
+        <div class="flex bg-slate-900 p-1 rounded-lg border border-slate-700 gap-1">
+          <button @click="chartTimeframe = 'day'; updateChart()" :class="chartTimeframe === 'day' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">Day</button>
+          <button @click="chartTimeframe = 'week'; updateChart()" :class="chartTimeframe === 'week' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">Week</button>
+          <button @click="chartTimeframe = 'month'; updateChart()" :class="chartTimeframe === 'month' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">Month</button>
+          <button @click="chartTimeframe = 'year'; updateChart()" :class="chartTimeframe === 'year' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">Year</button>
+          <button @click="chartTimeframe = 'category'; updateChart()" :class="chartTimeframe === 'category' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'" class="px-2.5 py-1 rounded text-xs transition-colors">By Category</button>
+        </div>
+      </div>
+
+      <!-- Canvas Chart Container -->
+      <div class="relative h-64 w-full bg-slate-900/50 p-2 rounded-lg border border-slate-700/50" x-init="$nextTick(() => renderChart())">
+        <canvas id="activityChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Data Export & Sharing Section -->
+    <section class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-3">
+      <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Data Export & Sharing</h2>
+      <p class="text-xs text-slate-400">Export your activity report or download a spreadsheet file to share with your coach or admin.</p>
+      
+      <div class="flex flex-wrap gap-2 pt-1">
+        <button @click="exportCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5">
+          📊 Download CSV Log
+        </button>
+        <button @click="exportJSON()" class="bg-slate-700 hover:bg-slate-600 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5">
+          💾 Download JSON Data
+        </button>
+        <button @click="sendEmail()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5">
+          ✉️ Email Report to Admin
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Category Settings Modal -->
+  <div x-show="showCategoryModal" x-cloak class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div @click.away="showCategoryModal = false" class="bg-slate-800 border border-slate-700 rounded-xl p-5 max-w-md w-full space-y-4">
+      <h3 class="text-base font-bold text-slate-100">Manage Categories</h3>
+      
+      <div class="space-y-3 max-h-60 overflow-y-auto pr-1">
+        <template x-for="(cat, index) in categories" :key="index">
+          <div class="flex items-center gap-2 bg-slate-900 p-2 rounded-lg">
+            <input type="text" x-model="cat.name" class="bg-transparent text-xs font-semibold text-slate-200 focus:outline-none flex-1">
+            <button @click="removeCategory(index)" class="text-rose-400 hover:text-rose-300 text-xs px-1">✕</button>
+          </div>
+        </template>
+      </div>
+
+      <form @submit.prevent="addCategory" class="flex gap-2 pt-2 border-t border-slate-700">
+        <input type="text" x-model="newCatName" placeholder="New category name..." class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 flex-1 focus:outline-none">
+        <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-xs font-bold">Add</button>
+      </form>
+
+      <div class="flex justify-end pt-2">
+        <button @click="showCategoryModal = false" class="bg-slate-700 hover:bg-slate-600 px-4 py-1.5 rounded-lg text-xs font-bold">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Script Logic -->
+  <script>
+    function trackerApp() {
+      return {
+        // REPLACE WITH YOUR EMAIL ADDRESS
+        adminEmail: 'your-email@example.com',
+
+        showCategoryModal: false,
+        newCatName: '',
+        newSubtaskInput: '',
+        chartTimeframe: 'week',
+        energyTimeframe: 'day',
+        chartInstance: null,
+        
+        catColors: [
+          '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'
+        ],
+
+        totalXp: 0,
+        restEnergy: 100,
+        history: [],
+        tasks: [],
+        categories: [
+          { name: 'Health' },
+          { name: 'Coding' },
+          { name: 'Chores' }
+        ],
+
+        newTask: {
+          title: '',
+          category: 'Health',
+          xp: 25,
+          isRest: false,
+          energyImpact: 15,
+          subtasks: []
+        },
+
+        init() {
+          const saved = JSON.parse(localStorage.getItem('gamified_tracker_data_v3') || '{}');
+          if (saved.totalXp !== undefined) this.totalXp = saved.totalXp;
+          if (saved.restEnergy !== undefined) this.restEnergy = saved.restEnergy;
+          if (saved.tasks) this.tasks = saved.tasks;
+          if (saved.history) this.history = saved.history;
+          if (saved.categories) this.categories = saved.categories;
+
+          this.$watch('totalXp', () => this.save());
+          this.$watch('restEnergy', () => this.save());
+          this.$watch('tasks', () => this.save(), { deep: true });
+          this.$watch('categories', () => this.save(), { deep: true });
+          this.$watch('history', () => {
+            this.save();
+            this.updateChart();
+          }, { deep: true });
+        },
+
+        save() {
+          localStorage.setItem('gamified_tracker_data_v3', JSON.stringify({
+            totalXp: this.totalXp,
+            restEnergy: this.restEnergy,
+            tasks: this.tasks,
+            history: this.history,
+            categories: this.categories
+          }));
+        },
+
+        // Export Functions
+        exportCSV() {
+          if (this.history.length === 0) {
+            alert('No activity history to export yet!');
+            return;
+          }
+
+          let csvContent = "data:text/csv;charset=utf-8,Timestamp,Type,Category,XP Earned,Energy Impact (%)\n";
+          this.history.forEach(row => {
+            const dateStr = new Date(row.timestamp).toLocaleString();
+            const typeStr = row.isRest ? "Rest" : "Work";
+            csvContent += `"${dateStr}","${typeStr}","${row.category}",${row.xp},${row.energyImpact || 15}\n`;
+          });
+
+          const encodedUri = encodeURI(csvContent);
+          const link = document.createElement("a");
+          link.setAttribute("href", encodedUri);
+          link.setAttribute("download", `activity_log_${new Date().toISOString().slice(0,10)}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        },
+
+        exportJSON() {
+          const exportData = {
+            totalXp: this.totalXp,
+            currentRestEnergy: this.restEnergy,
+            exportDate: new Date().toISOString(),
+            history: this.history
+          };
+
+          const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+          const downloadAnchor = document.createElement('a');
+          downloadAnchor.setAttribute("href", dataStr);
+          downloadAnchor.setAttribute("download", `user_tracker_backup_${new Date().toISOString().slice(0,10)}.json`);
+          document.body.appendChild(downloadAnchor);
+          downloadAnchor.click();
+          downloadAnchor.remove();
+        },
+
+        sendEmail() {
+          const subject = encodeURIComponent("User Activity Log Report");
+          const bodyText = `Hello,\n\nHere is my recent progress report:\n\n` +
+            `- Total XP Earned: ${this.totalXp} XP\n` +
+            `- Current Rest Energy: ${Math.round(this.restEnergy)}%\n` +
+            `- Total Completed Log Entries: ${this.history.length}\n\n` +
+            `Recent Logs:\n` +
+            this.history.slice(-5).map(h => `• [${new Date(h.timestamp).toLocaleDateString()}] ${h.category}: +${h.xp} XP (${h.isRest ? 'Rest' : 'Work'})`).join('\n') +
+            `\n\nSent from Gamified Task Tracker.`;
+
+          window.location.href = `mailto:${this.adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+        },
+
+        // Subtask Functions
+        addSubtaskToNewTask() {
+          if (!this.newSubtaskInput.trim()) return;
+          this.newTask.subtasks.push({
+            id: Date.now() + Math.random(),
+            title: this.newSubtaskInput.trim(),
+            completed: false
+          });
+          this.newSubtaskInput = '';
+        },
+
+        getCompletedSubtaskCount(task) {
+          if (!task.subtasks) return 0;
+          return task.subtasks.filter(s => s.completed).length;
+        },
+
+        getSubtaskProgressPercentage(task) {
+          if (!task.subtasks || task.subtasks.length === 0) return 0;
+          return Math.round((this.getCompletedSubtaskCount(task) / task.subtasks.length) * 100);
+        },
+
+        toggleSubtask(task, subtask) {
+          subtask.completed = !subtask.completed;
+          const totalSubtasks = task.subtasks.length;
+          
+          const portionXp = Math.round(task.xp / totalSubtasks);
+          const portionEnergy = (task.energyImpact || 15) / totalSubtasks;
+
+          if (subtask.completed) {
+            this.totalXp += portionXp;
+            if (task.isRest) {
+              this.restEnergy = Math.min(100, this.restEnergy + portionEnergy);
+            } else {
+              this.restEnergy = Math.max(0, this.restEnergy - portionEnergy);
+            }
+
+            this.history.push({
+              timestamp: new Date().toISOString(),
+              xp: portionXp,
+              category: task.category,
+              isRest: task.isRest,
+              energyImpact: portionEnergy
+            });
+
+            confetti({ particleCount: 20, spread: 40, origin: { y: 0.8 } });
+          } else {
+            this.totalXp = Math.max(0, this.totalXp - portionXp);
+            if (task.isRest) {
+              this.restEnergy = Math.max(0, this.restEnergy - portionEnergy);
+            } else {
+              this.restEnergy = Math.min(100, this.restEnergy + portionEnergy);
+            }
+          }
+
+          if (this.getCompletedSubtaskCount(task) === totalSubtasks) {
+            task.completed = true;
+            confetti({ particleCount: 60, spread: 70, origin: { y: 0.7 } });
+          }
+        },
+
+        // Filter Helpers for Analytics
+        isWithinTimeframe(timestamp, timeframe) {
+          const itemDate = new Date(timestamp);
+          const now = new Date();
+
+          if (timeframe === 'day') {
+            return itemDate.toDateString() === now.toDateString();
+          } else if (timeframe === 'month') {
+            return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
+          } else if (timeframe === 'year') {
+            return itemDate.getFullYear() === now.getFullYear();
+          }
+          return true;
+        },
+
+        getEnergyStats(timeframe) {
+          let restCount = 0;
+          let restEnergy = 0;
+          let workCount = 0;
+          let drainedEnergy = 0;
+
+          this.history.forEach(item => {
+            if (this.isWithinTimeframe(item.timestamp, timeframe)) {
+              if (item.isRest) {
+                restCount++;
+                restEnergy += (item.energyImpact || 15);
+              } else {
+                workCount++;
+                drainedEnergy += (item.energyImpact || 15);
+              }
+            }
+          });
+
+          return { restCount, restEnergy: Math.round(restEnergy), workCount, drainedEnergy: Math.round(drainedEnergy) };
+        },
+
+        getCategoryEnergyDrain(categoryName, timeframe) {
+          let totalDrain = 0;
+          this.history.forEach(item => {
+            if (!item.isRest && item.category === categoryName && this.isWithinTimeframe(item.timestamp, timeframe)) {
+              totalDrain += (item.energyImpact || 15);
+            }
+          });
+          return Math.round(totalDrain);
+        },
+
+        get timeframeXp() {
+          const now = new Date();
+          const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          const startOfWeek = startOfDay - (now.getDay() * 86400000);
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+          let today = 0, week = 0, month = 0;
+
+          this.history.forEach(item => {
+            const time = new Date(item.timestamp).getTime();
+            if (time >= startOfDay) today += item.xp;
+            if (time >= startOfWeek) week += item.xp;
+            if (time >= startOfMonth) month += item.xp;
+          });
+
+          return { today, week, month };
+        },
+
+        addTask() {
+          if (!this.newTask.title.trim()) return;
+          this.tasks.push({
+            id: Date.now(),
+            title: this.newTask.title,
+            category: this.newTask.category,
+            xp: this.newTask.xp,
+            isRest: this.newTask.isRest,
+            energyImpact: this.newTask.energyImpact || 15,
+            subtasks: [...this.newTask.subtasks],
+            completed: false
+          });
+          this.newTask.title = '';
+          this.newTask.subtasks = [];
+        },
+
+        completeTask(task) {
+          const completedSubCount = this.getCompletedSubtaskCount(task);
+          const totalSubtasks = task.subtasks ? task.subtasks.length : 0;
+          
+          let remainingXp = task.xp;
+          let remainingEnergy = task.energyImpact || 15;
+
+          if (totalSubtasks > 0) {
+            const fractionUnearned = (totalSubtasks - completedSubCount) / totalSubtasks;
+            remainingXp = Math.round(task.xp * fractionUnearned);
+            remainingEnergy = (task.energyImpact || 15) * fractionUnearned;
+            
+            task.subtasks.forEach(s => s.completed = true);
+          }
+
+          this.totalXp += remainingXp;
+
+          if (task.isRest) {
+            this.restEnergy = Math.min(100, this.restEnergy + remainingEnergy);
+          } else {
+            this.restEnergy = Math.max(0, this.restEnergy - remainingEnergy);
+          }
+
+          task.completed = true;
+
+          if (remainingXp > 0) {
+            this.history.push({
+              timestamp: new Date().toISOString(),
+              xp: remainingXp,
+              category: task.category,
+              isRest: task.isRest,
+              energyImpact: remainingEnergy
+            });
+          }
+
+          confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+        },
+
+        deleteTask(id) {
+          this.tasks = this.tasks.filter(t => t.id !== id);
+        },
+
+        addCategory() {
+          if (!this.newCatName.trim()) return;
+          if (!this.categories.some(c => c.name === this.newCatName)) {
+            this.categories.push({ name: this.newCatName.trim() });
+          }
+          this.newCatName = '';
+        },
+
+        removeCategory(index) {
+          this.categories.splice(index, 1);
+        },
+
+        getChartData() {
+          const now = new Date();
+          let labels = [];
+          let numBuckets = 0;
+          let getBucketIdx = (time) => 0;
+
+          if (this.chartTimeframe === 'day') {
+            labels = ['12am', '3am', '6am', '9am', '12pm', '3pm', '6pm', '9pm'];
+            numBuckets = 8;
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            getBucketIdx = (time) => time.getTime() >= startOfDay ? Math.floor(time.getHours() / 3) : -1;
+
+          } else if (this.chartTimeframe === 'week') {
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            labels = [];
+            numBuckets = 7;
+            for (let i = 6; i >= 0; i--) {
+              const d = new Date(now);
+              d.setDate(d.getDate() - i);
+              labels.push(days[d.getDay()]);
+            }
+            const startOfWeek = new Date(now);
+            startOfWeek.setDate(startOfWeek.getDate() - 6);
+            startOfWeek.setHours(0,0,0,0);
+            getBucketIdx = (time) => {
+              if (time < startOfWeek) return -1;
+              const diff = Math.floor((time - startOfWeek) / (1000 * 60 * 60 * 24));
+              return (diff >= 0 && diff < 7) ? diff : -1;
+            };
+
+          } else if (this.chartTimeframe === 'month') {
+            labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+            numBuckets = 4;
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+            getBucketIdx = (time) => {
+              if (time.getTime() < startOfMonth) return -1;
+              return Math.min(3, Math.floor((time.getDate() - 1) / 7));
+            };
+
+          } else if (this.chartTimeframe === 'year') {
+            labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            numBuckets = 12;
+            const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
+            getBucketIdx = (time) => time.getTime() >= startOfYear ? time.getMonth() : -1;
+          }
+
+          if (this.chartTimeframe === 'category') {
+            const workData = this.categories.map(c => 
+              this.history.filter(i => !i.isRest && i.category === c.name).reduce((sum, item) => sum + item.xp, 0)
+            );
+            const restData = this.categories.map(c => 
+              this.history.filter(i => i.isRest && i.category === c.name).reduce((sum, item) => sum + (item.energyImpact || 15), 0)
+            );
+
+            return {
+              labels: this.categories.map(c => c.name),
+              datasets: [
+                {
+                  label: 'Work XP',
+                  type: 'bar',
+                  data: workData,
+                  backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                  borderColor: '#6366f1',
+                  borderWidth: 1.5,
+                  borderRadius: 4,
+                  yAxisID: 'y'
+                },
+                {
+                  label: 'Rest Restored (%)',
+                  type: 'bar',
+                  data: restData,
+                  backgroundColor: 'rgba(56, 189, 248, 0.7)',
+                  borderColor: '#38bdf8',
+                  borderWidth: 1.5,
+                  borderRadius: 4,
+                  yAxisID: 'y1'
+                }
+              ]
+            };
+          }
+
+          const categoryDatasets = this.categories.map((cat, idx) => ({
+            label: cat.name + ' XP',
+            type: 'bar',
+            stack: 'xpStack',
+            data: new Array(numBuckets).fill(0),
+            backgroundColor: this.catColors[idx % this.catColors.length] + 'b3',
+            borderColor: this.catColors[idx % this.catColors.length],
+            borderWidth: 1,
+            borderRadius: 3,
+            yAxisID: 'y'
+          }));
+
+          const restDataArray = new Array(numBuckets).fill(0);
+
+          this.history.forEach(item => {
+            const time = new Date(item.timestamp);
+            const idx = getBucketIdx(time);
+            if (idx >= 0 && idx < numBuckets) {
+              const catDataset = categoryDatasets.find(d => d.label === item.category + ' XP');
+              if (catDataset) {
+                catDataset.data[idx] += item.xp;
+              }
+              if (item.isRest) {
+                restDataArray[idx] += (item.energyImpact || 15);
+              }
+            }
+          });
+
+          const restLineDataset = {
+            label: 'Rest Energy Restored (%)',
+            type: 'line',
+            data: restDataArray,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 3,
+            yAxisID: 'y1'
+          };
+
+          return {
+            labels,
+            datasets: [...categoryDatasets, restLineDataset]
+          };
+        },
+
+        renderChart() {
+          const container = document.getElementById('activityChart')?.parentElement;
+          if (!container) return;
+
+          container.innerHTML = '<canvas id="activityChart"></canvas>';
+          const ctx = document.getElementById('activityChart').getContext('2d');
+          const chartData = this.getChartData();
+
+          if (this.chartInstance) {
+            this.chartInstance.destroy();
+          }
+
+          this.chartInstance = new Chart(ctx, {
+            data: chartData,
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: {
+                  display: true,
+                  position: 'top',
+                  labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 10 }
+                }
+              },
+              scales: {
+                x: {
+                  ticks: { color: '#94a3b8', font: { size: 10 } },
+                  grid: { display: false },
+                  stacked: true
+                },
+                y: {
+                  type: 'linear',
+                  display: true,
+                  position: 'left',
+                  stacked: this.chartTimeframe !== 'category',
+                  title: { display: true, text: 'XP', color: '#94a3b8', font: { size: 10 } },
+                  ticks: { color: '#94a3b8', font: { size: 10 } },
+                  grid: { color: 'rgba(51, 65, 85, 0.5)' },
+                  beginAtZero: true
+                },
+                y1: {
+                  type: 'linear',
+                  display: true,
+                  position: 'right',
+                  title: { display: true, text: 'Rest Energy %', color: '#38bdf8', font: { size: 10 } },
+                  ticks: { color: '#38bdf8', font: { size: 10 } },
+                  grid: { drawOnChartArea: false },
+                  beginAtZero: true
+                }
+              }
+            }
+          });
+        },
+
+        updateChart() {
+          this.$nextTick(() => {
+            this.renderChart();
+          });
+        }
+      }
+    }
+  </script>
+</body>
+</html>
