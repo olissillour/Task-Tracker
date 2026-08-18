@@ -62,9 +62,57 @@
   <!-- Main Content Area -->
   <main class="max-w-4xl mx-auto p-4 space-y-6 mt-2">
 
-    <!-- Add Task Card -->
+    <!-- Premade Tasks Quick-Add Library -->
+    <section class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-3">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Premade Task Library</h2>
+          <p class="text-[11px] text-slate-400">Click any preset task below to instantly add it to your active task list.</p>
+        </div>
+        <button @click="showPremadeModal = true" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">
+          ⚙️ Manage Premade Tasks
+        </button>
+      </div>
+
+      <!-- Category Tabs for Premade Tasks -->
+      <div class="flex gap-1 overflow-x-auto pb-1 border-b border-slate-700/80">
+        <template x-for="cat in categories" :key="cat.name">
+          <button @click="selectedPremadeCategory = cat.name" 
+                  :class="selectedPremadeCategory === cat.name ? 'bg-indigo-600 text-white font-bold border-indigo-400' : 'bg-slate-900/60 text-slate-400 border-slate-700 hover:text-slate-200'" 
+                  class="px-3 py-1 rounded-t-lg text-xs border-t border-x transition-colors whitespace-nowrap" 
+                  x-text="cat.name">
+          </button>
+        </template>
+      </div>
+
+      <!-- Premade Task Items Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
+        <template x-for="pt in filteredPremadeTasks" :key="pt.id">
+          <div class="bg-slate-900/70 border border-slate-700/80 hover:border-slate-500 p-2.5 rounded-lg flex items-center justify-between gap-2 group transition-all">
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold text-slate-100 truncate" x-text="pt.title"></div>
+              <div class="flex items-center gap-2 text-[10px] mt-0.5">
+                <span class="text-amber-400 font-bold" x-text="'+' + pt.xp + ' XP'"></span>
+                <span :class="pt.isRest ? 'text-sky-400' : 'text-rose-400'" class="font-bold" x-text="(pt.isRest ? '+' : '-') + pt.energyImpact + '% Rest'"></span>
+              </div>
+            </div>
+            <button @click="addPremadeToActive(pt)" class="bg-indigo-600 hover:bg-indigo-500 text-white p-1.5 rounded-md text-xs font-bold transition-colors flex-shrink-0" title="Add to Active Tasks">
+              + Add
+            </button>
+          </div>
+        </template>
+
+        <template x-if="filteredPremadeTasks.length === 0">
+          <div class="col-span-full text-center py-4 text-xs text-slate-500 bg-slate-900/40 rounded-lg border border-dashed border-slate-700">
+            No premade tasks in this category yet. Click "Manage Premade Tasks" to create one!
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- Custom Add Task Card -->
     <section class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-md space-y-4">
-      <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Add New Task</h2>
+      <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Add Custom Task</h2>
       <form @submit.prevent="addTask" class="space-y-4">
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -220,7 +268,7 @@
 
         <template x-if="tasks.filter(t => !t.completed).length === 0">
           <div class="text-center py-8 bg-slate-800/40 rounded-xl border border-dashed border-slate-700 text-slate-500 text-sm">
-            All tasks completed! Add a new task above or take a rest.
+            All tasks completed! Add a new task above or select one from the Premade Task Library.
           </div>
         </template>
       </div>
@@ -349,14 +397,91 @@
     </div>
   </div>
 
+  <!-- Premade Tasks Management Modal -->
+  <div x-show="showPremadeModal" x-cloak class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div @click.away="showPremadeModal = false" class="bg-slate-800 border border-slate-700 rounded-xl p-5 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+        <h3 class="text-base font-bold text-slate-100">Manage Premade Task Library</h3>
+        <button @click="showPremadeModal = false" class="text-slate-400 hover:text-slate-200 font-bold">✕</button>
+      </div>
+
+      <!-- Add New Premade Task Form -->
+      <form @submit.prevent="addPremadeTask" class="bg-slate-900/80 p-3 rounded-lg border border-slate-700/80 space-y-3">
+        <h4 class="text-xs font-bold text-indigo-400 uppercase">Create New Premade Preset</h4>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input type="text" x-model="newPremade.title" placeholder="Preset Title (e.g., 30m Workout)" required class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100">
+          
+          <select x-model="newPremade.category" class="bg-slate-800 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100">
+            <template x-for="cat in categories" :key="cat.name">
+              <option :value="cat.name" x-text="cat.name"></option>
+            </template>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <label class="block text-[10px] text-slate-400 font-semibold mb-1">XP Value</label>
+            <input type="number" x-model.number="newPremade.xp" min="5" max="500" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-amber-400 font-bold">
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-slate-400 font-semibold mb-1">Type</label>
+            <select x-model="newPremade.isRest" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100">
+              <option :value="false">💼 Work</option>
+              <option :value="true">🎮 Rest</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-slate-400 font-semibold mb-1">Energy Impact (%)</label>
+            <input type="number" x-model.number="newPremade.energyImpact" min="1" max="100" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-bold" :class="newPremade.isRest ? 'text-sky-400' : 'text-rose-400'">
+          </div>
+        </div>
+
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 py-1.5 rounded text-xs font-bold text-white transition-colors">
+          + Add to Library
+        </button>
+      </form>
+
+      <!-- Existing Premade Tasks List -->
+      <div class="space-y-2">
+        <h4 class="text-xs font-bold text-slate-400 uppercase">Existing Presets (<span x-text="premadeTasks.length"></span>)</h4>
+        
+        <div class="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+          <template x-for="pt in premadeTasks" :key="pt.id">
+            <div class="flex items-center justify-between bg-slate-900 p-2 rounded border border-slate-700 text-xs">
+              <div class="min-w-0 flex-1 pr-2">
+                <div class="font-bold text-slate-200 truncate" x-text="pt.title"></div>
+                <div class="text-[10px] text-slate-400">
+                  <span class="text-indigo-400" x-text="pt.category"></span> | 
+                  <span class="text-amber-400" x-text="'+' + pt.xp + ' XP'"></span> | 
+                  <span :class="pt.isRest ? 'text-sky-400' : 'text-rose-400'" x-text="(pt.isRest ? '+' : '-') + pt.energyImpact + '%'"></span>
+                </div>
+              </div>
+              <button @click="deletePremadeTask(pt.id)" class="text-rose-400 hover:text-rose-300 font-bold px-2 py-1">
+                ✕
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-slate-700">
+        <button @click="showPremadeModal = false" class="bg-slate-700 hover:bg-slate-600 px-4 py-1.5 rounded-lg text-xs font-bold">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- App Script Logic -->
   <script>
     function trackerApp() {
       return {
-        // REPLACE WITH YOUR EMAIL ADDRESS
         adminEmail: 'your-email@example.com',
 
         showCategoryModal: false,
+        showPremadeModal: false,
+        selectedPremadeCategory: 'Health',
         newCatName: '',
         newSubtaskInput: '',
         chartTimeframe: 'week',
@@ -377,6 +502,23 @@
           { name: 'Chores' }
         ],
 
+        premadeTasks: [
+          { id: 1, title: '30m Workout / Exercise', category: 'Health', xp: 50, isRest: false, energyImpact: 20 },
+          { id: 2, title: 'Drink 1L Water', category: 'Health', xp: 15, isRest: true, energyImpact: 10 },
+          { id: 3, title: 'Code Review / Bug Fixing', category: 'Coding', xp: 40, isRest: false, energyImpact: 15 },
+          { id: 4, title: 'Read Technical Article', category: 'Coding', xp: 20, isRest: false, energyImpact: 10 },
+          { id: 5, title: 'Clean Desk / Workstation', category: 'Chores', xp: 20, isRest: false, energyImpact: 10 },
+          { id: 6, title: '15m Meditate / Power Nap', category: 'Health', xp: 25, isRest: true, energyImpact: 25 }
+        ],
+
+        newPremade: {
+          title: '',
+          category: 'Health',
+          xp: 25,
+          isRest: false,
+          energyImpact: 15
+        },
+
         newTask: {
           title: '',
           category: 'Health',
@@ -387,17 +529,24 @@
         },
 
         init() {
-          const saved = JSON.parse(localStorage.getItem('gamified_tracker_data_v3') || '{}');
+          const saved = JSON.parse(localStorage.getItem('gamified_tracker_data_v4') || '{}');
           if (saved.totalXp !== undefined) this.totalXp = saved.totalXp;
           if (saved.restEnergy !== undefined) this.restEnergy = saved.restEnergy;
           if (saved.tasks) this.tasks = saved.tasks;
           if (saved.history) this.history = saved.history;
           if (saved.categories) this.categories = saved.categories;
+          if (saved.premadeTasks) this.premadeTasks = saved.premadeTasks;
+
+          if (this.categories.length > 0) {
+            this.selectedPremadeCategory = this.categories[0].name;
+            this.newPremade.category = this.categories[0].name;
+          }
 
           this.$watch('totalXp', () => this.save());
           this.$watch('restEnergy', () => this.save());
           this.$watch('tasks', () => this.save(), { deep: true });
           this.$watch('categories', () => this.save(), { deep: true });
+          this.$watch('premadeTasks', () => this.save(), { deep: true });
           this.$watch('history', () => {
             this.save();
             this.updateChart();
@@ -405,13 +554,49 @@
         },
 
         save() {
-          localStorage.setItem('gamified_tracker_data_v3', JSON.stringify({
+          localStorage.setItem('gamified_tracker_data_v4', JSON.stringify({
             totalXp: this.totalXp,
             restEnergy: this.restEnergy,
             tasks: this.tasks,
             history: this.history,
-            categories: this.categories
+            categories: this.categories,
+            premadeTasks: this.premadeTasks
           }));
+        },
+
+        get filteredPremadeTasks() {
+          return this.premadeTasks.filter(pt => pt.category === this.selectedPremadeCategory);
+        },
+
+        addPremadeToActive(premadeTask) {
+          this.tasks.push({
+            id: Date.now(),
+            title: premadeTask.title,
+            category: premadeTask.category,
+            xp: premadeTask.xp,
+            isRest: premadeTask.isRest,
+            energyImpact: premadeTask.energyImpact,
+            subtasks: [],
+            completed: false
+          });
+          confetti({ particleCount: 15, spread: 30, origin: { y: 0.8 } });
+        },
+
+        addPremadeTask() {
+          if (!this.newPremade.title.trim()) return;
+          this.premadeTasks.push({
+            id: Date.now(),
+            title: this.newPremade.title.trim(),
+            category: this.newPremade.category,
+            xp: this.newPremade.xp,
+            isRest: this.newPremade.isRest,
+            energyImpact: this.newPremade.energyImpact
+          });
+          this.newPremade.title = '';
+        },
+
+        deletePremadeTask(id) {
+          this.premadeTasks = this.premadeTasks.filter(pt => pt.id !== id);
         },
 
         // Export Functions
